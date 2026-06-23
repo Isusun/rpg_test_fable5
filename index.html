@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>星灯の継承者</title>
+<style>
+  :root{
+    --win-bg: rgba(8,10,28,0.92);
+    --win-border: #e8e8f0;
+    --txt: #f4f4f8;
+    --txt-dim: #a8a8c0;
+    --accent: #ffd966;
+    --hp: #6fdc6f;
+    --hp-low: #ff9d4d;
+    --mp: #6fb8ff;
+    --danger: #ff7070;
+    --focus: #ffd966;
+  }
+  *{ box-sizing: border-box; margin:0; padding:0; -webkit-tap-highlight-color: transparent; }
+  html,body{ height:100%; background:#05060f; overflow:hidden; touch-action:none; }
+  body{ display:flex; align-items:center; justify-content:center;
+        font-family:'Hiragino Kaku Gothic ProN','BIZ UDGothic','Yu Gothic','MS Gothic',monospace,sans-serif; }
+  #stage{
+    position:relative; aspect-ratio: 3/2;
+    width: min(100vw, calc(100vh * 1.5));
+    max-width:1200px;
+    font-size: calc(var(--s,1) * 10px);
+    user-select:none;
+  }
+  #stage canvas{ position:absolute; inset:0; width:100%; height:100%; image-rendering:pixelated; }
+  .layer{ position:absolute; inset:0; pointer-events:none; }
+  .layer > *{ pointer-events:auto; }
+
+  /* ===== window style ===== */
+  .win{
+    position:absolute;
+    background:var(--win-bg);
+    border: 0.3em solid var(--win-border);
+    border-radius: 0.8em;
+    box-shadow: 0 0 0 0.25em rgba(8,10,28,0.92), 0 0.4em 1.2em rgba(0,0,0,0.6);
+    color:var(--txt);
+    padding: 0.9em 1.1em;
+    line-height:1.65;
+    font-size:1.5em;
+  }
+  .hidden{ display:none !important; }
+
+  /* message window */
+  #msgwin{ left:3%; right:3%; bottom:3%; min-height:5.2em; }
+  #msgtext{ white-space:pre-wrap; min-height:3.4em; }
+  #msgname{ color:var(--accent); font-weight:bold; }
+  #msgnext{ position:absolute; right:0.8em; bottom:0.4em; color:var(--accent); animation: bob 0.7s infinite alternate; }
+  @keyframes bob{ from{transform:translateY(0)} to{transform:translateY(0.25em)} }
+
+  /* generic menu list */
+  .menu{ list-style:none; }
+  .menu li{
+    padding: 0.18em 0.55em 0.18em 1.3em; position:relative; cursor:pointer;
+    border-radius:0.3em; color:var(--txt); outline:none;
+  }
+  .menu li[aria-disabled="true"]{ color:var(--txt-dim); }
+  .menu li.sel{ background:rgba(255,217,102,0.16); }
+  .menu li.sel::before{ content:"▶"; position:absolute; left:0.15em; color:var(--accent); }
+  .menu li:focus-visible{ box-shadow:0 0 0 2px var(--focus); }
+  .menu .rval{ float:right; color:var(--txt-dim); margin-left:1em; }
+  .menu li.sel .rval{ color:var(--txt); }
+
+  /* choice window */
+  #choicewin{ right:4%; bottom: 26%; min-width: 9em; }
+
+  /* title */
+  #title{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1.2em;
+          background: radial-gradient(ellipse at 50% 30%, #1a2150 0%, #0a0d24 60%, #05060f 100%); }
+  #title h1{ color:#fff; font-size:4.2em; letter-spacing:0.12em; text-shadow:0 0 1em #6fb8ff, 0 0.08em 0 #283; margin-bottom:0.1em; }
+  #title .sub{ color:var(--txt-dim); font-size:1.5em; margin-bottom:1em; }
+  #title .win{ position:relative; min-width:13em; }
+  .stars{ position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+  .stars i{ position:absolute; width:2px; height:2px; background:#fff; border-radius:50%; opacity:0.8; }
+
+  /* party HUD (battle) */
+  #bhud{ left:2%; right:2%; top:2%; display:flex; gap:0.6em; padding:0.5em 0.7em; }
+  .pstat{ flex:1; padding:0.15em 0.5em; border-radius:0.4em; }
+  .pstat .nm{ font-weight:bold; }
+  .pstat.turn{ background:rgba(255,217,102,0.18); box-shadow:0 0 0 2px var(--accent) inset; }
+  .pstat.dead{ opacity:0.45; }
+  .bar{ height:0.42em; background:#333a55; border-radius:0.2em; overflow:hidden; margin:0.12em 0; }
+  .bar > i{ display:block; height:100%; background:var(--hp); transition:width 0.25s; }
+  .bar.mp > i{ background:var(--mp); }
+  .bar > i.low{ background:var(--hp-low); }
+  .stags{ font-size:0.8em; min-height:1.2em; }
+  .stag{ display:inline-block; padding:0 0.35em; border-radius:0.3em; margin-right:0.25em; font-weight:bold; }
+  .stag.poison{ background:#7a3fa0; } .stag.sleep{ background:#3f6aa0; }
+  .stag.atkup{ background:#a05a3f; } .stag.defup{ background:#3fa06a; }
+
+  /* battle command */
+  #bcmd{ left:3%; bottom:20%; min-width:9.5em; }
+  #bsub{ left:30%; right:3%; bottom:20%; max-height:11em; overflow-y:auto; }
+  #blog{ left:3%; right:3%; bottom:2%; min-height:4.6em; max-height:4.6em; overflow:hidden; }
+  #blog div{ white-space:pre-wrap; }
+
+  /* main menu */
+  #mainmenu{ left:3%; top:4%; min-width:9em; }
+  #goldwin{ right:3%; top:4%; }
+  #subwin{ left:32%; top:4%; right:3%; bottom:28%; overflow-y:auto; }
+  #partywin{ left:3%; top:46%; right:55%; bottom:28%; overflow-y:auto; font-size:1.3em; }
+  #helpwin{ left:3%; right:3%; bottom:3%; min-height:3.2em; color:var(--txt); }
+  .prow{ display:flex; justify-content:space-between; padding:0.1em 0.2em; border-radius:0.3em; cursor:pointer; }
+  .prow.sel{ background:rgba(255,217,102,0.16); }
+  .prow:focus-visible{ box-shadow:0 0 0 2px var(--focus); }
+  table.stats{ border-collapse:collapse; width:100%; }
+  table.stats td{ padding:0.05em 0.4em; }
+  table.stats td:last-child{ text-align:right; }
+  .up{ color:var(--hp); } .down{ color:var(--danger); }
+
+  /* shop */
+  #shopwin{ left:3%; top:4%; right:40%; bottom:28%; overflow-y:auto; }
+  #shopinfo{ right:3%; top:4%; left:63%; }
+
+  /* fade overlay */
+  #fade{ position:absolute; inset:0; background:#000; opacity:0; pointer-events:none; transition:opacity 0.35s; z-index:50; }
+  @media (prefers-reduced-motion: reduce){
+    #fade{ transition:none; }
+    #msgnext{ animation:none; }
+    .bar > i{ transition:none; }
+  }
+
+  /* touch controls */
+  #touch{ position:absolute; inset:0; pointer-events:none; z-index:40; }
+  #touch .tbtn{
+    position:absolute; pointer-events:auto;
+    background:rgba(20,24,60,0.35); border:2px solid rgba(232,232,240,0.45);
+    color:rgba(244,244,248,0.85); border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.6em; font-weight:bold;
+  }
+  #touch .tbtn:active{ background:rgba(255,217,102,0.35); }
+  .dpad{ position:absolute; left:2%; bottom:4%; width:13em; height:13em; pointer-events:none; }
+  .dpad .tbtn{ width:4.2em; height:4.2em; border-radius:0.8em; }
+  #t-up{ left:4.4em; top:0; } #t-down{ left:4.4em; bottom:0; }
+  #t-left{ left:0; top:4.4em; } #t-right{ right:0; top:4.4em; }
+  #t-a{ right:3%; bottom:13%; width:5em; height:5em; }
+  #t-b{ right:14%; bottom:5%; width:4.2em; height:4.2em; }
+  #t-menu{ right:2%; top:2%; width:6em; height:2.4em; border-radius:0.5em !important; font-size:1.2em !important; }
+
+  #dmgroot{ position:absolute; inset:0; pointer-events:none; z-index:30; overflow:hidden; }
+  .dmgnum{ position:absolute; font-weight:bold; font-size:2em; color:#fff;
+    text-shadow: 0.06em 0.06em 0 #000, -0.06em 0.06em 0 #000, 0.06em -0.06em 0 #000, -0.06em -0.06em 0 #000;
+    animation: dmgpop 0.85s forwards; }
+  .dmgnum.heal{ color:#8dffa0; } .dmgnum.crit{ color:#ffd966; font-size:2.6em; } .dmgnum.miss{ color:#bbb; font-size:1.5em; }
+  @keyframes dmgpop{
+    0%{ transform:translateY(0) scale(0.6); opacity:0; }
+    15%{ transform:translateY(-0.5em) scale(1.15); opacity:1; }
+    60%{ transform:translateY(-1em) scale(1); opacity:1; }
+    100%{ transform:translateY(-1.6em) scale(1); opacity:0; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .dmgnum{ animation: dmgfade 0.85s forwards; }
+    @keyframes dmgfade{ 0%{opacity:1} 80%{opacity:1} 100%{opacity:0} }
+  }
+
+  #ending{ position:absolute; inset:0; background:#05060f; color:var(--txt); display:flex; align-items:center; justify-content:center; z-index:60; }
+  #ending .inner{ max-width:80%; font-size:1.7em; line-height:2; white-space:pre-wrap; text-align:center; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="pixi-holder"></div>
+
+  <div class="layer" id="uiroot">
+    <!-- battle -->
+    <div id="bhud" class="win hidden"></div>
+    <div id="bcmd" class="win hidden"><ul class="menu" id="bcmdlist"></ul></div>
+    <div id="bsub" class="win hidden"><ul class="menu" id="bsublist"></ul></div>
+    <div id="blog" class="win hidden"></div>
+
+    <!-- field menu -->
+    <div id="goldwin" class="win hidden"></div>
+    <div id="mainmenu" class="win hidden"><ul class="menu" id="mainmenulist"></ul></div>
+    <div id="subwin" class="win hidden"></div>
+    <div id="partywin" class="win hidden"></div>
+    <div id="helpwin" class="win hidden"></div>
+
+    <!-- shop -->
+    <div id="shopwin" class="win hidden"></div>
+    <div id="shopinfo" class="win hidden"></div>
+
+    <!-- message / choices -->
+    <div id="msgwin" class="win hidden">
+      <div id="msgtext"></div><div id="msgnext" class="hidden">▼</div>
+      <span id="msgname" class="hidden"></span>
+    </div>
+    <div id="choicewin" class="win hidden"><ul class="menu" id="choicelist"></ul></div>
+
+    <!-- title -->
+    <div id="title">
+      <div class="stars" id="titlestars"></div>
+      <h1>星灯の継承者</h1>
+      <div class="sub">— 砕けた星核と、最後の灯 —</div>
+      <div class="win"><ul class="menu" id="titlemenu"></ul></div>
+    </div>
+
+    <div id="ending" class="hidden"><div class="inner"></div></div>
+  </div>
+
+  <div id="dmgroot"></div>
+
+  <div id="touch" class="hidden">
+    <div class="dpad">
+      <button class="tbtn" id="t-up" aria-label="上">▲</button>
+      <button class="tbtn" id="t-down" aria-label="下">▼</button>
+      <button class="tbtn" id="t-left" aria-label="左">◀</button>
+      <button class="tbtn" id="t-right" aria-label="右">▶</button>
+    </div>
+    <button class="tbtn" id="t-a" aria-label="決定">A</button>
+    <button class="tbtn" id="t-b" aria-label="キャンセル">B</button>
+    <button class="tbtn" id="t-menu" aria-label="メニュー">メニュー</button>
+  </div>
+
+  <div id="fade"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.js"></script>
+<script src="js/strings.js"></script>
+<script src="js/gfx.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/field.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
